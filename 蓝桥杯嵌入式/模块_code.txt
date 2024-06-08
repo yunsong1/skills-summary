@@ -1,0 +1,478 @@
+LED模块
+函数名：led_disp(uchar num)
+参数：需要点亮的LED位置，比如第一个LED灯，就是0x01，点亮第一个灯和第二个灯就是0x03
+函数思路：首先将所有的LED灯关闭，然后点亮指定参数的引脚，再打开锁存器开关，最后关闭锁存器开关
+void led_disp(uchar num)
+{
+	HAL_GPIO_WritePin(GPIOC,GPIO_PIN_All,GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOC,num<<8,GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_2,GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_2,GPIO_PIN_RESET);
+}
+
+LED闪烁模块
+
+定时，每隔0.1s执行程序
+
+记时，2s后执行程序
+
+
+LCD模块
+LCD_Clear(Blue);
+其是将整个屏幕的背景颜色设置为Blue，同时清除屏幕上的所有内容
+LCD_SetBackColor(Red);
+其是设置屏幕上打印出来的字符的背景色
+LCD_SetTextColor(White);3
+其是设置屏幕上打印出来的字符的字体颜色
+sprintf(dis," PA5_DAC=%.3f",adc2_data[2]*3.3/4096);
+LCD_DisplayStringLine(Line5, (uchar *)dis);
+
+
+按键模块：
+由于开启了定时器中断，所以初始化的时候需要打开定时器中断，以定时器6为例
+函数为：HAL_TIM_Base_Start_IT(&htim6);
+通过定时器进行处理，分频后的时钟周期设为10ms，刚好是按键的消抖时间。打开定时器中断，则定时器每次溢出之后，都会进入中断回调函数执行一段处理程序，而中断回调函数是一个弱函数，所以重新定义中断回调函数，设置中断执行的内容。
+中断回调函数为：
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef * htim)
+
+整体思路是：
+定义一个结构体保存按键的多个变量，其中有：
+	长按标志、短按标志、双击标志
+	状态机、键值
+	按下时间、间隔时间
+	双击状态
+每个定时器，周期性计数溢出之后，都会调用此中断回调函数，所以需要判断中断函数的种类
+在判断为定时器6的条件下，获取此刻每个按键的值
+通过for循环遍历每个按键的状态
+状态0的时候，如果按键按下，跳到状态1
+状态1的时候，如果按键依旧按下，说明不是抖动，跳到状态2，按下时间清零
+状态2的时候，在按键按下条件下对按下的时间进行计数，松开后，判断按下时间，如果大，则为长按，如果小则可能是短按或者双击。所以需要松开时间才能判断。结合双击状态机，当第一次松开时开始计时，如果计时过程中计数出现大于则为短按，此时双击状态机复位。如果一直没有触发短按，说明不是短按，那么双击状态机跳到下一个状态，该状态下则为双击，同时双击状态机复位。每次按键松开之后，按键状态复位到0，同时松开的计数时间清零开始松开计数
+注意计时的代码位置
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == TIM6)
+	{
+		//获取键值
+		key[0].value = HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_0);
+		key[1].value = HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_1);
+		key[2].value = HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_2);
+		key[3].value = HAL_GPIO_ReadPin(GPIOA,GPIO_PIN_0);
+		
+		//遍历状态
+		for(int i=0;i<4;i++)
+		{
+			
+			switch(key[i].state)
+			{
+				case 0:
+					if(key[i].value == 0) key[i].state = 1;
+					break;
+				
+				case 1:
+					if(key[i].value == 0)//消抖
+					{
+						key[i].state = 2;
+						key[i].click_time = 0;//按下时间清零，重新开始计数
+					}
+					else key[i].state = 0;
+					break;
+					
+				case 2:
+					if(key[i].value == 0)//按下时间计数
+						key[i].click_time++;
+					else if(key[i].click_time >50) //松开&&按下时间大于50
+					{
+						key[i].long_flag = 1;//长按
+						key[i].state = 0;
+					}
+					else //松开&&按下时间小于50		短按或者双击
+					{
+						//标记松开的状态
+						switch(key[i].double_state)
+						{
+							case 0://第一次松开
+								key[i].double_state = 1;
+								break;
+							case 1://第二次松开
+								key[i].double_state = 0;
+								key[i].double_flag = 1;
+								break;
+						}
+						
+						key[i].state = 0;//每次松开之后重新对按键判断
+						key[i].double_time = 0;//每次松开之后清零，重新开始计数	
+					}
+					break;
+					
+			}
+			//对第一次松开计时
+			//在switch外进行
+			if(key[i].double_state == 1)
+			{
+				key[i].double_time++;
+				if(key[i].double_time > 30)
+				{
+					key[i].double_state = 0;
+					key[i].short_flag = 1;
+				}
+			}
+			
+			
+		}
+		
+	}
+}
+
+
+PWM模块：首先需要开启定时器PWM输出
+函数为：HAL_TIM_PWM_Start(&htim17,TIM_CHANNEL_1);
+设置重装载值：__HAL_TIM_SetAutoreload(&htim17,autoreload);//设置重装载值
+设置比较值：__HAL_TIM_SetCompare(&htim17,TIM_CHANNEL_1,compare);//设置比较值
+
+PWM捕获模块：
+捕获模块有两种方法
+第一种方法是利用定时器的直接间接通道，以定时器8为例，思路——开启定时器8的捕获中断，因为发生跳变沿的时候需要中断进行数据的保存和处理。直接通道设置为上升沿，间接通道设置为下降沿。简介通道并没有直接和引脚相连接而直接通道是直接和引脚相连接的。首先需要打开定时器两个通道的捕获中断
+中断函数如下：HAL_TIM_IC_Start_IT(&htim8,TIM_CHANNEL_1);
+		       HAL_TIM_IC_Start_IT(&htim8,TIM_CHANNEL_2);
+然后重定义回调函数，定时器的捕获中断函数如下：
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim);
+所有定时的捕获中断回调函数都是这个，所以需要判断是哪个定时器
+			if(htim->Instance == TIM8)
+在为定时器8的条件下，又分为通道1和通道2的触发中断
+			if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+			if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+通道1的条件下，为直接通道，此时是上升沿触发。我们此时需要的执行的功能有：
+保存此刻上升沿的定时器的计数值，然后清零定时器的计数值，然后计算频率和占空比。频率为定时器的时钟分频除以上升沿的计数值，占空比用整型变量为下降沿计数值*100/上升沿计数值
+得到定时器的计数值：__HAL_TIM_GetCounter(htim)
+设置定时器的计数值：__HAL_TIM_SetCounter(htim,0)
+在通道2的条件下，为简介通道，只需要保存此刻下降沿的计数值即可
+这样就完成了PWM的捕获
+
+第二种方法是只利用一个直接通道，通过改变跳变沿极性的方式。
+因此需要设置一个flag，用于标识不同触发极性执行的程序。所以每次定时器捕获中断触发，都需要取反一次，以定时器16为例
+tim16_flag = !tim16_flag;
+默认配置为上升沿极性，变量初始值默认为0，所以
+flag为0的时候，为上升沿触发中断执行的程序：if(tim16_flag == 0)
+和直接与间接的思路类似，上升沿的情况下需要保存当前的计数值，然后清零计数值，然后计算频率与占空比，还需要修改为下降沿极性，也即是设置下降沿极性，极性的英文单词是polarity，所以关键词是set、polarity。在.h文件中检索到设置极性的函数为：
+__HAL_TIM_SET_CAPTUREPOLARITY(htim,TIM_CHANNEL_1,TIM_INPUTCHANNELPOLARITY_FALLING);	
+
+同理flag为1的时候，为下降沿触发中断执行的程序，和直接间接类似，下降沿的情况下，要保存下降沿下的计数值，同时还需要修改为上升沿极性：
+__HAL_TIM_SET_CAPTUREPOLARITY(htim,TIM_CHANNEL_1,TIM_INPUTCHANNELPOLARITY_RISING);
+这样就完成了单通道的捕获
+
+注：
+sprintf(arry,"PB4_Freq is %-5dhz",tim3_freq);
+sprintf(arry,"PB12_Vol is %-4.2fV",get_adc1(&hadc1)*3.3/4096);
+%-5d表示格式为整型，同时占用5个字符位置，左对齐
+%-4.2f表示格式为浮点型，同时占用4个字符位置，保留小数点后两位，左对齐
+留有足够的位置进行变量值的显示，避免出现重影
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == TIM8)
+	{
+		//直接通道
+		if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+		{
+			tim8_1_rise = __HAL_TIM_GetCounter(htim);//获取此时的上升沿计数值
+			__HAL_TIM_SetCounter(htim,0);//清零计数值
+			tim8_freq = TIM_8_FREQ/tim8_1_rise;
+			tim8_duty = tim8_2_fall*100/tim8_1_rise;
+		}
+		
+		//间接通道
+		if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+		{
+			tim8_2_fall = __HAL_TIM_GetCounter(htim);//获取此时的下降沿计数值
+		}
+
+	}
+	if(htim->Instance == TIM3)
+	{
+		//直接通道
+		if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+		{
+			tim3_1_rise = __HAL_TIM_GetCounter(htim);//获取此时的上升沿计数值
+			__HAL_TIM_SetCounter(htim,0);//清零计数值
+			tim3_freq = TIM_3_FREQ/tim3_1_rise;
+			tim3_duty = tim3_2_fall*100/tim3_1_rise;
+		}
+		
+		//间接通道
+		if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
+		{
+			tim3_2_fall = __HAL_TIM_GetCounter(htim);//获取此时的下降沿计数值
+		}		
+		
+	}
+	if(htim->Instance == TIM16)
+	{
+		if(tim16_flag == 0)
+		{
+			tim16_rise = __HAL_TIM_GetCounter(htim);
+			__HAL_TIM_SetCounter(htim,0);
+			tim16_freq = TIM_16_FREQ/tim16_rise;
+			tim16_duty = tim16_fall*100/tim16_rise;
+			__HAL_TIM_SET_CAPTUREPOLARITY(htim,TIM_CHANNEL_1,TIM_INPUTCHANNELPOLARITY_FALLING);			
+		}
+		else 
+		{
+			tim16_fall = __HAL_TIM_GetCounter(htim);
+			__HAL_TIM_SET_CAPTUREPOLARITY(htim,TIM_CHANNEL_1,TIM_INPUTCHANNELPOLARITY_RISING);
+		}
+
+		tim16_flag = !tim16_flag;	
+		
+	}	
+
+}
+
+
+eeprom模块：
+eeprom型号为M24C02，是通道I2C协议进行读写的。就两根信号线，均配置为输出模式
+后续的驱动代码会根据协议重新配置为输入或输出模式。对float型变量强制转换为int类型
+float a；int b; b=(int)a; int需要用括号括起来
+读写控制位为0时，表示主机要对从机进行数据写入操作；读写控制位为1时，表示主机要对从机进行数据读出操作。设备地址中的最后一位，读数据的话则为1，写数据的话则为0
+当一个完整字节的指令或数据传输完成，从机设备正确接收到指令或数据后，会通过拉低SDA为低电平，向主机设备发送单比特的应答信号，表示数据或指令写入成功。若从机正确应答，可以结束或开始下一字节数据或指令的传输，否则表明数据或指令写入失败，主机就可以决定是否放弃写入或者重新发起写入。
+
+当读数据的时候，Slave设备每发送完8个数据位，如果Master希望继续读下一个字节，Master应该回答“ACK”以提示Slave准备下一个数据，如果Master不希望读取更多字节，Master应该回答“NACK”以提示Slave设备准备接收Stop信号。
+
+字节写：给一个地址，只写一个数据
+时序——发送起始信号，发送设备地址(写)，等待应答信号，然后发送字节地址，等待应答，发送写字节数据，等待应答，发送结束信号。
+
+随机读：给一个地址，只读对应的数据
+时序——发送起始信号，发送设备地址(写)，等待应答信号，然后发送字节地址，等待应答，发送起始信号，发送设备地址(读)，等待应答信号，接受读字节数据，发送NOT_ACK，发送结束信号。
+
+写函数：参数——写入地址(u8类型)，写入数据(u8类型)，数据的写入需要时间，所以写函数最后需要延	时
+void eeprom_write(char write_addr,char write_data);
+	I2CStart();//Start
+	I2CSendByte(0xA0);//发送设备地址(写)
+	I2CWaitAck();//等待应答信号
+	I2CSendByte(write_addr);//发送字节地址
+	I2CWaitAck();//等待应答
+
+	I2CSendByte(write_data);//发送写字节数据
+	I2CWaitAck();//等待应答
+	I2CStop();//Stop
+	HAL_Delay(10);
+
+写函数：参数——读取地址(u8类型)，返回读取数据(u8类型)
+char eeprom_read(char read_addr);
+	char temp;
+
+	I2CStart();//Start
+	I2CSendByte(0xA0);//发送设备地址(写)
+	I2CWaitAck();//等待应答信号
+	I2CSendByte(read_addr);//发送字节地址
+	I2CWaitAck();//等待应答信号
+	
+	I2CStart();//Start
+	I2CSendByte(0xA1);//发送设备地址(读)
+	I2CWaitAck();//等待应答信号	
+	temp = I2CReceiveByte();//接受读字节数据
+	I2CSendNotAck();//发送NOT_ACK
+	I2CStop();//Stop
+	
+	return temp;
+
+ADC模块：
+分为两种方法
+第一种ADC只有一个通道采集的时候，也即是某个ADC只开启了1个通道，此时不需要扫描模式，也不需要
+中断，也不需要连续模式，就是单纯的开启ADC，然后只采样一次，并会关闭ADC，将采样数据保存在寄存器中。所以设置一个ADC采集函数，以ADC1为例
+首先需要开始ADC，进行一次采样
+HAL_ADC_Start(&hadc1);
+ADC采集函数：uint get_adc1(ADC_HandleTypeDef * hadc);
+返回的是32位的无符号整型值
+函数中首先需要保存ADC采集的值，从ADC寄存器中读取至，也即是get到ADC的value值
+temp = HAL_ADC_GetValue(hadc);用一个中间变量保存
+因为是非连续模式，所以采集一次之后就会关闭ADC，我们需要重新开启ADC
+HAL_ADC_Start(hadc);
+并返回ADC的值：
+return temp;
+为什么是非连续模式，因为如果是连续模式，ADC采集一次之后，会继续采集，如果不能及时读取，数据会覆盖，甚至读错。所以只能通过中断，当每次采集之后触发中断，保存数据，但是这也会遇到问题就是在中断执行过程中，ADC依旧会开始采集，如果ADC采集的速率很快，每次中断结束之后就又会进入中断，或者中断没有执行完成，ADC又完成了采集触发的中断，那么main主程序就无法得到执行。
+uint get_adc(ADC_HandleTypeDef * hadc)
+{
+	uint temp;
+	temp = HAL_ADC_GetValue(hadc);
+	HAL_ADC_Start(hadc);
+	return temp;
+}
+
+第二种方法是通过DMA搬运的方式获取ADC采集的数据的，关闭DMA和ADC中断。最开始打开工程migrate到最新的电脑版本
+
+CubeMX中将ADC配置为DMA模式，添加DMA通道，使能DMA模式，不要开启ADC和DMA中断。同时使能连续转换模式，如果只开启了ADC的一个通道，那么扫描模式就不用开启，如果有两个或两个以上就需要使能扫描模式。需要注意的地方有：扫描模式、连续转换模式、DMA连续传输模式。DMA传输的数据大小为半字，大小为16bit，因为ADC中缓存采样值的寄存器是16位的并且ADC是12位的，同时DMA开启循环模式，也即是只要有数据就会立刻传输。ADC的采样周期可以设置的大一些。
+这样配置好了之后，需要定义ADC缓存数组，用于缓存DMA传输的数据，如果有两个通道那么数组元素为2，如果只有一个通道那么数组元素为1，只需要打开ADC_DMA传输的通道，采样数据就会源源不断的缓存到数组中并刷新。因此可以直接调用数组元素作为采样值
+只会使用到一个函数：开启ADC的DMA传输
+	u16 adc2_arry[2];
+	u16 adc1_arry[1];
+	HAL_ADC_Start_DMA(&hadc2, (uint32_t *)adc2_arry, 2);
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc1_arry, 1);
+数组元素需要定义为16位，避免数据错位，因为一次DMA传输就是16bit。函数的最后一个参数是通道的数量，也即是需要DMA传输的数量。数组需要强制转换为32位的地址
+
+DAC模块：
+将引脚配置为DAC输出模式即可，然后需要做的就是打开DAC，再者需要设置DAC的通道值
+HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+在dac.h文件中检索Set，表征设置的意思，就可以搜索到函数
+HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, temp);
+定义一个函数用于设置输出电压值，参数有dac句柄，dac通道，电压值
+void set_dac1(DAC_HandleTypeDef * hdac,uint Channel ,float vol);
+在此函数中只需要定义一个中间变量，将浮点的电压值变换为DAC值
+temp = vol/3.3*4096;
+然后调用设置函数即可
+
+void set_dac1(DAC_HandleTypeDef * hdac,uint Channel,float vol)
+{
+	uint temp;
+	temp = vol/3.3*4096;
+	HAL_DAC_SetValue(hdac, Channel, DAC_ALIGN_12B_R, temp);	
+	
+}
+
+UART模块：
+发送采用的是阻塞模式，函数会一直执行到发送完成
+接收采用的是非阻塞模式，利用接受中断的方式进行接受，便于对接受的字节数进行计数
+因此需要开启中断
+对于发送，使用重定义的printf进行发送，在设置中勾选微软库，同时在help中搜索retarget，第三个中包含了重定义函数fputc，将注释替换为阻塞发送函数即可。其中20是最大的发送时间，如果超过，则退出函数。
+int fputc(int ch, FILE *f)
+{
+  HAL_UART_Transmit(&huart1, (const uint8_t *)&ch, 1, 20);
+  return ch;
+}
+这样可以使用printf进行串口的发送了
+printf("rx_arry lenth is:%d\n",strlen(rx_arry));
+
+接收过程：
+需要定义一个数组用于缓存数据
+需要定义一个变量用于接收数据
+需要定义一个变量用于指示数组的深度
+char rx_arry[50];
+char rx_data;
+char rx_pointer;
+
+对于接收中断，首先我们要打开接受中断，通过调用接收中断函数即可打开中断
+HAL_UART_Receive_IT(&huart1, (uint8_t *)&rx_data, 1);
+接收中断回调函数，如下：
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
+首先还是需要判断是否是串口1
+if(huart->Instance == USART1)
+在此条件下执行
+		rx_arry[rx_pointer++] =  rx_data;
+		HAL_UART_Receive_IT(huart, (uint8_t *)&rx_data, 1);	
+打开中断的时候，也即是调用了非阻塞接收函数，所以第一个数据会寄存到rx_data
+然后进入中断回调函数，再将其保存到数组中，同时深度自加，再次打开中断接收
+此中断回调函数会关闭接受中断，所以需要重新调用非阻塞接收函数打开中断同时接收数据
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	if(huart->Instance == USART1)
+	{
+		rx_arry[rx_pointer++] =  rx_data;
+		//由于此中断回调函数会关闭中断，因此要重新打开
+		HAL_UART_Receive_IT(huart, (uint8_t *)&rx_data, 1);	
+		//不能使用阻塞函数，无法打开中断
+//		HAL_UART_Receive(huart, (uint8_t *)&rx_data, 1, 20);		
+	}
+
+}
+
+在串口接收中需要判断何时数据接收完毕，从而执行相应的程序
+定义了深度，为0的话，说明没有接受到数据
+不为0的话，说明开始接收数据，在每次中断后，深度的值都会变化，所以保存上一次深度值，然后和此次深度值比较，如果相等说明接收完毕。延时1ms，确保接受中断发生。
+	if(rx_pointer != 0)
+	{
+		int temp = rx_pointer;
+		HAL_Delay(1);
+		if(temp == rx_pointer)
+			rx_proc();
+	}
+数据接收完成之后，开始串口接收处理函数
+void rx_proc();
+需要将深度清零，重新开始接收。然后使用memset函数清零数组，重新缓存接收数据。对于字符串，其是以‘\0’作为结束标志的，占一个字节，数组大小需要将结束标志算进去。strlen只计算字符起始到‘\0’之间的数量。memset的头文件是string.h
+//数组大小还需要算入字符串数组的结尾"\0"
+sscanf(rx_buf,"%4s:%4s:%12s:%f",car_type,car_num,car_time,&dac);字符分割函数
+
+void rx_proc()
+{
+	LCD_Clear(Blue);
+	sprintf(arry,"%s",rx_arry);
+	LCD_DisplayStringLine(Line7,(u8 *)arry);
+	printf("rx_arry lenth is:%d\n",strlen(rx_arry));
+	printf("rx_arry size is:%d",sizeof(rx_arry));
+	rx_pointer = 0;memset(rx_arry,0,50);
+
+}
+
+
+系统滴答计时器模块：
+STM32CUBEMX生成的工程，会自动把Systick配置成1ms中断的定时器，并在中断函数里，在中断处理函数中将变量uwTick每1ms增加1。这样我们就可以知道芯片的走时情况，知道芯片到目前为止上电多长时间。
+uwTick这个变量在程序中是定义为__IO uint32_t uwTick;,是一个32位的无符号数，所以他一共可以计 2 32 2^{32} 232这么多毫秒，差不多是49天左右，所以不用担心会有溢出的问题，即使溢出了，他也会自动归零。HAL_Delay延时会阻塞程序，使其他程序实时性下降。
+
+//由于uwTick的类型是32位无符号整型，所以我们自定义的ledTick也定义为这样的类型：
+__IO uint32_t ledTick =0;
+//对led灯哪个亮哪个不亮的控制，初始化为0xff就是使所有灯都亮
+u8 led_ctrl=0xff;
+void LED_Process(void)
+{
+//由于uwTick在上电之后就会每1ms加一，而ledTick一开始初始化为0，所以uwTick-ledTick的值就是uwTick本身，当uwTick大于500，即程序上电500毫秒之后，执行后面的代码，否则就return,也就是退出这个函数
+	if(uwTick-ledTick<500)return;
+//	把uwTick的值赋给ledTick，为了下次进入这个函数还是500毫秒之后执行该程序（因为uwTick的值是一直递增的，所以想要控制uwTick与ledTick的差值始终为500就需要每进一次这个函数更新一次ledTick）
+	ledTick=uwTick;
+	//控制led灯的亮灭
+	LED_Control(led_ctrl);
+	//每进一次这个函数就把led_ctrl取反，相当于每500毫秒，灯整体亮或者灭
+	led_ctrl=~led_ctrl;
+}
+
+LCD例程，需要使用例程中CubeMX工程重新生成的keil工程HAL_06_LCD，再将LCD文件移到上面来
+
+
+led指定位操作模块：& | ^
+在led_disp()函数的基础上进行操作
+
+指定位点亮：也即是指定位赋1，同时不改变其他位的状态。通过按位'或'逻辑运算符进行操作，'|'。和1进行或，状态为1；和0进行或，状态不变
+
+指定位熄灭：也即是指定位赋0，同时不改变其他位的状态。通过按位'与'逻辑运算符进行操作，'&'。和0进行与，状态为0；和1进行与，状态不变
+
+指定位翻转：也即是指定位翻转，同时不改变其他位的状态。通过按位'异或'逻辑运算符进行操作，'^'。和1进行异或，状态为翻转；和0进行异或，状态不变
+异或：相异为1，相同为0；
+    指定位
+1	1	：0		翻转
+1	0	：1		翻转
+0	1	：1		不变
+0	0	：0		不变
+
+定义一个全局变量用于保存led的状态
+char led_num = 0x00;//初始的时候全部熄灭
+
+与上0，则为0，灭
+或上1，则为1，亮
+异或上1，则翻转
+
+void led_proc()
+{
+	if(uwTick - led_Tick < 100)//0.1s的间隔
+		return ;
+	led_Tick = uwTick;
+
+	// & | ^
+	if(lcd_view == 0)			//条件
+		led_num = led_num|0x01;	//led1亮，或上1，则为1，亮
+	else led_num = led_num&0xfe;	//led1灭，与上0，则为0，灭
+
+	if(pwm_change_flag == 1)	//条件
+		led_num = led_num^0x02;	//led2每0.1s翻转，异或上1，则翻转
+	else led_num = led_num&0xfd;	//led2灭
+	
+	if(pa1_duty_lock == 1)		//条件
+		led_num = led_num|0x04;	//led3亮
+	else led_num = led_num&0xfb;	//led3灭
+	
+	led_disp(led_num);			//状态都设置好了，开始点亮Led
+}
+
+
+
+
+
+
+
