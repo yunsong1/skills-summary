@@ -1,0 +1,68 @@
+/*
+ *@brief	This example describes how to use PWM to drive Motor
+ *@author	jiangjx@boxlab.com
+ *@Contact Us: http://www.boxlab.cn
+ *Copyright(C) 2014, BoxLab
+*/
+#include "exynos_4412.h"
+/**********************************************************************
+ * @brief		mydelay_ms program body
+ * @param[in]	int (ms)
+ * @return 		None
+ **********************************************************************/
+void mydelay_ms(int ms)
+{
+	int i, j;
+
+	while(ms--)
+	{
+		for (i = 0; i < 5; i++)
+			for (j = 0; j < 514; j++);
+	}
+}
+
+void PWM_init(void)
+{
+	GPK2.CON = (GPK2.CON & ~(0xf<<(2*4)))| 1<<(2*4);//GPK2_4:output
+	GPD0.CON = (GPD0.CON & ~(0xf)) | 0x2;// GPD0_0 : TOUT_0
+
+	PWM.TCFG0 = (PWM.TCFG0 & ~(0xFF)) |0x63; //Prescaler 0 value for timer 0; 99 + 1 = 100
+	PWM.TCFG1 = (PWM.TCFG1 & ~(0xF)) | 0x3; // 1/8 input for PWM timer 0
+
+	PWM.TCNTB0 = 200;
+	PWM.TCMPB0 = 100;
+
+	/* auto-reload, Inverter Off, manual update */
+	PWM.TCON = (PWM.TCON & ~(0XF)) | 0XA;
+	/* auto-reload, Inverter Off, manual update off, start Timer0*/
+	PWM.TCON = (PWM.TCON & ~(0xF)) | 0X9;
+}
+
+
+/*-------------------------MAIN FUNCTION------------------------------*/
+/**********************************************************************
+ * @brief		Main program body
+ * @param[in]	None
+ * @return 		int
+ **********************************************************************/
+int main(void) {
+
+	GPK2.DAT &= ~(0x1 << 2);
+
+	GPX1.CON = (GPX1.CON & ~(0xf<<(3*4)))| 1<<(3*4); //GPX1_3:output, LED1
+	PWM_init();
+	while(1)
+	{
+		//Turn on LED1
+		GPX1.DAT |= 0x1 << 3;
+		//GPD0.DAT |= 0x1;
+		mydelay_ms(500);
+
+		//Turn off LED1
+		GPX1.DAT &= ~(0x1 << 3);
+	//	GPD0.DAT &= ~0x1;
+		mydelay_ms(500);
+	}
+	return 0;
+}
+

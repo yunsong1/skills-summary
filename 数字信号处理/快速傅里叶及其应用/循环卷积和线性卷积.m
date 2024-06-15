@@ -1,0 +1,15 @@
+n=0:15;
+p=8;
+q=2;
+xa=exp(-(n-p).^2/q);
+a=0.1;f=0.0625;
+xb=exp(-a*n).*sin(2*pi*f*n);
+ya=fft(xa);ya=abs(ya);
+yb=fft(xb);yb=abs(yb);
+y1=ya.*yb;
+subplot(2,1,1);stem(n,y1);
+yaa=fft(xa,32);yaa=abs(yaa);
+ybb=fft(xb,32);ybb=abs(ybb);
+y2=yaa.*ybb;
+subplot(2,1,2);
+n=0:31;stem(n,y2);

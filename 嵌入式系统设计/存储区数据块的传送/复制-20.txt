@@ -1,0 +1,34 @@
+.GLOBAL_START
+.TEXT
+.EQU NUM, 20                    /*定义需要复制的字数据个数NUM为20*/
+_START:
+LDR  RO,=SRC                      /*将 RO 指向源数据区的起始地址*/
+LDR  R1,=DST                      /*将 R1 指向源数据区的起始地址*1
+MOV R2,#NUM                      /*将需要复制的字数据个数存放在R2中
+MOV  SP, #OX400                   /*将堆栈指针 SP 指向#OX400*/
+BLKCOPY:
+MOVS R3,R2,LSR#3                  /*R2的值除以8的结果存入 R3*/
+BEQ COPYWORDS                     /*若Z=1，则转 COPYWORDS*/
+STMFD SP!,(R4-R11)               /*将 R4～R11 的内容存入堆栈进行保护*/
+OCTCOPY:
+LDMIA RO!,(R4-R11)               /*从源数据区装载8个字数据到R4～R11*/
+STMIA R1!,(R4-R11)                /*将R4~R11中的8个字数据存入目的数据区*/
+SUBS R3,R3,#1                    /*每复制一次R3减1*/
+BNE OCTCOPY                      /若R3不等于0，则转移到OCTCOPY*/
+LDMFD SP!, (R4-R11)             /*将堆栈内容恢复到 R4～R11*/
+COPYWORDS:
+ANDS R2,R2,#7                    /*计算需复制的奇数个字的个数*/
+BEQ STOP                         /*若R2=0则停止*/
+WORDCOPY:
+LDR R3, [RO], #4               /*将源数据区的一个字装载至 R3*/
+STR R3, [R1],#4                 /*将R3中的数据存到目的数据区*/
+SUBS R2,R2,#1                    /*数据传输控制计数器减 1*/
+BNE WORDCOPY                     /*若R2不等于0，则转移到WORDCOPY*/
+STOP:
+B STOP
+.LTORG
+SRC:                              /*源数据区起始地址标号*/
+      .LONG 1,2，3，4,5,6,7,8,1,2,3,4,5,6,7,8,1,2,3,4
+DST:                              /目的数据区起始地址标号*/
+.LONG 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+.END

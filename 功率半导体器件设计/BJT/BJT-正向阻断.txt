@@ -1,0 +1,50 @@
+go atlas
+mesh 
+ 
+x.m l=0      spacing=0.1
+x.m l=2      spacing=0.05
+x.m l=2.5    spacing=0.1
+x.m l=3.0    spacing=0.05
+x.m l=4.0    spacing=0.1
+ 
+y.m l=0.0    spacing=0.01
+y.m l=0.05   spacing=0.001
+y.m l=0.055   spacing=0.05
+y.m l=1.0    spacing=0.2
+y.m l=2.0    spacing=0.02
+y.m l=2.1    spacing=0.2
+y.m l=3.0    spacing=3.0
+y.m l=19.0   spacing=0.02
+y.m l=19.1   spacing=0.2
+y.m l=20.0   spacing=0.2
+ 
+region num=1 silicon
+ 
+electrode num=1 name=emitter    x.min=0 x.max=2
+electrode num=2 name=base      x.min=3 x.max=4 
+electrode num=3 name=collector bottom
+ 
+doping reg=1 uniform n.type conc=5e13
+doping reg=1 gauss   p.type conc=5e17 peak=0    junct=2 
+doping reg=1 gauss   n.type conc=5e19 peak=0    junct=0.05 x.min=0 x.max=2
+doping reg=1 gauss   p.type conc=5e19 peak=0    junct=0.05 x.min=3 x.max=4
+doping reg=1 gauss   n.type conc=5e19 peak=20   junct=19 
+
+save outfile=bjt.str
+tonyplot bjt.str  
+model   bipolar  print conmob  fldmob  srh  auger  bgn
+impact selb
+method  newton 
+contact name=base common=emitter
+ 
+solve init
+log outfile=bjt_0.log
+solve vcollector=0.01
+solve vcollector=0.05
+solve vcollector=0.1  vstep=0.1  vfinal=1.0  name=collector
+solve vcollector=1    vstep=1    vfinal=5.0 name=collector
+solve vcollector=5    vstep=5    vfinal=50  name=collector
+solve vcollector=50   vstep=10   vfinal=100.0 name=collector
+solve vcollector=100  vstep=20   vfinal=350.0 name=collector e.comp=5e-12  compl=2
+tonyplot bjt_0.log
+Quit

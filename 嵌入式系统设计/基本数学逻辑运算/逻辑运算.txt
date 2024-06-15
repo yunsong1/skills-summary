@@ -1,0 +1,25 @@
+/*armasm1b.s*/
+.EQU X,45                     /*定义变量 X，并赋值为 45*/
+.EQU Y, 64                   /*定义变量 Y，并赋值为64*/
+.EQU Z,87                     /*定义变量 Z，并赋值为 87*/
+.EQU STACK_TOP,0X1000         /定义栈顶0X1000*/
+.GLOBAL _START
+TEXT
+START:                         /*程序代码开始标志*/
+MOV RO,#X                     /*X 的值放入 RO*/
+MOV RO, RO, LSL #8         /*RO的值乘以2的8次方*/
+MOV R1,#Y                     /*Y的值放入R1*/
+ADD R2,RO, R1,LSR #1        /*R1的值除以2再加上RO后的值放入R2*/
+MOV SP，#OX1000
+STR R2, [SP]
+MOV RO.#Z                     /*Z 的值放入 R0*/
+AND RO, RO,#OXFF             /*取RO的低八位*/
+MOV R1,#Y                     /*Y 的值放入 R1*/
+ADD R2,RO,R1,LSR #1          /*R1的值除以2再加上RO后的值放入R2*/
+LDR RO,[SP]                   /*Y的值放入R1*/
+MOV R1,#OX01
+ORR RO, RO, R1
+MOV R1,R2                     /*Y的值放入R1*/
+ADD R2, RO, R1, LSR #1    /*R1的值除以2加上RO的值放入R2*/
+STOP: B STOP                 /*程序结束，进入死循环*/
+.END

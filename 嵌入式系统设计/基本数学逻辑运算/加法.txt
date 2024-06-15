@@ -1,0 +1,33 @@
+/*armasmla.s(基于Embest IDE 200X开发)*/
+.EQU X,45                      /*定义变量 X，并赋值为 45*/
+.EQU Y,64                      /*定义变量Y，并赋值为64*/
+.EQU STACK_TOP,0X1000          /*定义栈顶 0X1000*/
+.GLOBAL_START
+.TEXT
+_START:                         /*程序代码开始标志*/
+MOV SP,#STACK_TOP
+MOV RO,#X                      /*X的值放入 R0*/
+STR RO,[SP]                    /*RO的值保存到堆栈*/
+MOV RO,#Y                      /*Y的值放入RO*/
+LDR R1,[SP]                    /*取堆栈中的数到R1*/
+ADD RO,RO,R1
+STR RO, [SP]
+STOP: B STOP                  /*程序结束，进入死循环*/
+.END
+
+/*armasmla.s(基于ADS1.2开发)*/
+X EQU 45                      ；定义变量X，并赋值为45
+Y EQU64                        ；定义变量Y,并赋值为64
+STACK_TOP EQU 0x1000          ；定义栈顶 0X1000
+AREA armasm1, CODE, READONLY ；声明代码段 Example1
+ENTRY                           ；标识程序入口
+CODE32                          ；声明32位ARM指令
+START MOV SP,#STACK_TOP       ；程序代码开始标志
+MOV RO,#X                      ；X的值放入 RO
+STR RO,[SP]                    ；RO的值保存到堆栈
+MOV RO,#Y                      ；Y的值放入 RO
+LDR R1,[SP]                    ；取堆栈中的数到R1
+ADD RO, RO, R1
+STR RO,[SP]
+STOP B STOP                   ；程序结束，进入死循环
+END

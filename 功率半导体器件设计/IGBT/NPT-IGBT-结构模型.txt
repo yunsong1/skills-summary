@@ -1,0 +1,41 @@
+go atlas
+
+mesh space.mult=1
+
+x.m loc=0.0   spac=0.5
+x.m loc=4.0   spac=0.5
+x.m loc=5.0   spac=0.2
+x.m loc=6.0   spac=0.5
+x.m loc=9.0   spac=0.5
+x.m loc=12.0  spac=0.2
+x.m loc=13.0  spac=1
+x.m loc=20.0  spac=1
+
+y.m loc=-0.1   spac=0.1
+y.m loc=1.0    spac=0.1
+y.m loc=1.4    spac=0.2
+y.m loc=2.0    spac=0.5
+y.m loc=5.0    spac=0.5
+y.m loc=6.0    spac=0.2
+y.m loc=7.0    spac=0.5
+y.m loc=10.0   spac=4.0
+y.m loc=180.0  spac=4.0
+y.m loc=182.0  spac=1.0
+y.m loc=183.0  spac=0.2
+y.m loc=184.0  spac=1.0
+y.m loc=193.0  spac=1.0
+
+region  num=1  x.min=0  x.max=20  y.min=0.0   y.max=193.0  material=silicon
+region  num=2  x.min=0  x.max=20  y.min=-0.1  y.max=0     material=oxy
+
+electr  name=emitter     x.min=0   x.max=7   y.min=0  y.max=0
+electr  name=gate        x.min=10  x.max=20  top
+electr  name=collector   x.min=0   x.max=20  bot
+
+doping uniform n.type conc=5e13   reg=1
+doping gauss   p.type conc=2e17   peak=0.3   junc=6  x.min=0  x.max=10  ratio.lat=0.6
+doping gauss   n.type conc=5e19   peak=0.05  junc=0.6  x.min=5  x.max=10  ratio.lat=0.6
+doping gauss   p.type conc=1e19   peak=193   junc=183
+
+save outf=igbt.str
+tonyplot igbt.str

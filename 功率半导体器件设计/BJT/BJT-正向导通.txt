@@ -1,0 +1,98 @@
+go atlas
+mesh 
+ 
+x.m l=0      spacing=0.1
+x.m l=2      spacing=0.05
+x.m l=2.5    spacing=0.1
+x.m l=3.0    spacing=0.05
+x.m l=4.0    spacing=0.1
+ 
+y.m l=0.0    spacing=0.01
+y.m l=0.05   spacing=0.001
+y.m l=0.055   spacing=0.05
+y.m l=1.0    spacing=0.2
+y.m l=2.0    spacing=0.02
+y.m l=2.1    spacing=0.2
+y.m l=3.0    spacing=3.0
+y.m l=19.0   spacing=0.02
+y.m l=19.1   spacing=0.2
+y.m l=20.0   spacing=0.2
+ 
+region num=1 silicon
+ 
+electrode num=1 name=emitter    x.min=0 x.max=2
+electrode num=2 name=base      x.min=3 x.max=4 
+electrode num=3 name=collector bottom
+ 
+doping reg=1 uniform n.type conc=5e13
+doping reg=1 gauss   p.type conc=5e17 peak=0    junct=2 
+doping reg=1 gauss   n.type conc=5e19 peak=0    junct=0.05 x.min=0 x.max=2
+doping reg=1 gauss   p.type conc=5e19 peak=0    junct=0.05 x.min=3 x.max=4
+doping reg=1 gauss   n.type conc=5e19 peak=20   junct=19 
+
+save outfile=bjt.str
+tonyplot bjt.str  
+model   bipolar  print conmob  fldmob  srh  auger  bgn
+impact selb
+
+
+models conmob fldmob consrh auger print bipolar
+method newton autonr trap
+solve init
+
+log off
+solve init
+solve vbase=0.025
+solve vbase=0.05
+solve  vbase=0.1 vstep=0.1 vfinal=0.7 name=base
+# switch to current boundary conditions
+contact name=base current
+# ramp IB and save solutions
+solve ibase=1.e-6
+save outf=bjt_1.str master
+solve ibase=2.e-6
+save outf=bjt_2.str master
+solve ibase=3.e-6
+save outf=bjt_3.str master
+solve ibase=4.e-6
+save outf=bjt_4.str master
+solve ibase=5.e-6
+save outf=bjt_5.str master
+
+# load in each initial guess file and ramp VCE
+load inf=bjt_1.str master
+log outf=bjt_1.log 
+solve vcollector=0.0 vstep=0.1  vfinal=0.5 name=collector
+solve vcollector=0.5 vstep=0.25 vfinal=2   name=collector
+solve vcollector=2   vstep=1    vfinal=5   name=collector
+
+load inf=bjt_2.str master
+log outf=bjt_2.log
+solve vcollector=0.0 vstep=0.1  vfinal=0.5 name=collector
+solve vcollector=0.5 vstep=0.25 vfinal=2   name=collector
+solve vcollector=2   vstep=1    vfinal=5   name=collector
+
+load inf=bjt_3.str master
+log outf=bjt_3.log
+solve vcollector=0.0 vstep=0.1  vfinal=0.5 name=collector
+solve vcollector=0.5 vstep=0.25 vfinal=2   name=collector
+solve vcollector=2   vstep=1    vfinal=5   name=collector
+
+
+load inf=bjt_4.str master
+log outf=bjt_4.log
+solve vcollector=0.0 vstep=0.1  vfinal=0.5 name=collector
+solve vcollector=0.5 vstep=0.25 vfinal=2   name=collector
+solve vcollector=2   vstep=1    vfinal=5   name=collector
+
+
+load inf=bjt_5.str master
+log outf=bjt_5.log
+solve vcollector=0.0 vstep=0.1  vfinal=0.5 name=collector
+solve vcollector=0.5 vstep=0.25 vfinal=2   name=collector
+solve vcollector=2   vstep=1    vfinal=5   name=collector
+
+ plot results
+tonyplot -overlay  bjt_1.log bjt_2.log bjt_3.log bjt_4.log bjt_5.log  
+Quit
+
